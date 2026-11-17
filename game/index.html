@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AETHERION: CHRONO-BASTION — Tactical Twin-Stick &amp; Time-Rift Citadel Defense</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div id="app-shell">
+    <!-- 主战场 Canvas 渲染层 -->
+    <canvas id="game-viewport-canvas" width="1280" height="720"></canvas>
+
+    <!-- 顶部与底部实时战术 HUD 遥测面板 -->
+    <header id="hud-telemetry-bar" class="hud-layer">
+      <div class="hud-top-row">
+        <!-- 左侧：玩家战机与以太核心状态 -->
+        <div id="hud-vitals-panel" class="hud-card">
+          <div class="vital-row">
+            <span class="vital-label">VALKYRIE HULL</span>
+            <div class="meter-track">
+              <div id="player-hull-fill" class="meter-fill hull-fill" style="width: 100%"></div>
+            </div>
+            <span id="player-hull-text" class="vital-value">100 / 100</span>
+          </div>
+          <div class="vital-row">
+            <span class="vital-label">CHRONO ENERGY</span>
+            <div class="meter-track">
+              <div id="player-energy-fill" class="meter-fill energy-fill" style="width: 100%"></div>
+            </div>
+            <span id="player-energy-text" class="vital-value">100%</span>
+          </div>
+          <div class="vital-row">
+            <span class="vital-label">AETHER CORE</span>
+            <div class="meter-track">
+              <div id="bastion-core-fill" class="meter-fill core-fill" style="width: 100%"></div>
+            </div>
+            <span id="bastion-core-text" class="vital-value">500 / 500</span>
+          </div>
+        </div>
+
+        <!-- 中央：星区波次、Boss 血条与威胁进度 -->
+        <div id="hud-sector-panel" class="hud-card center-card">
+          <div class="sector-header">
+            <span id="sector-wave-badge" class="badge-pill cyan-pill">SECTOR WAVE 1 / 5</span>
+            <span id="sector-objective-text" class="objective-title">DEFEND THE AETHER CORE &amp; REPEL VOID ARMADA</span>
+            <span id="mission-timer-text" class="timer-readout">00:00</span>
+          </div>
+          <div class="wave-progress-wrap">
+            <div id="wave-progress-fill" class="wave-progress-bar" style="width: 25%"></div>
+          </div>
+          <!-- Boss 专属分段生命条 -->
+          <div id="boss-health-banner" class="boss-banner hidden">
+            <div class="boss-title-row">
+              <span id="boss-name-label" class="boss-name">VOID LEVIATHAN MK-IV // DREADNOUGHT</span>
+              <span id="boss-hp-label" class="boss-hp-num">4200 / 4500 HP</span>
+            </div>
+            <div class="boss-meter-track">
+              <div id="boss-hp-fill" class="boss-meter-fill" style="width: 93%"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 右侧：得分、连击倍率、时空碎片与音效开关 -->
+        <div id="hud-score-panel" class="hud-card score-card">
+          <div class="score-grid">
+            <div class="metric-box">
+              <span class="metric-label">SCORE</span>
+              <span id="hud-score-value" class="metric-number">000,000</span>
+            </div>
+            <div class="metric-box">
+              <span class="metric-label">OVERDRIVE</span>
+              <span id="hud-combo-value" class="metric-number combo-gold">x1.0</span>
+            </div>
+            <div class="metric-box">
+              <span class="metric-label">SHARDS</span>
+              <span id="hud-shards-value" class="metric-number shard-cyan">120</span>
+            </div>
+            <div class="metric-box">
+              <span class="metric-label">TURRETS</span>
+              <span id="hud-turrets-value" class="metric-number">0 / 6</span>
+            </div>
+          </div>
+          <div class="hud-utility-buttons">
+            <button id="btn-audio-toggle" class="hud-mini-btn" type="button" title="Toggle WebAudio Synth (M)">AUDIO: ON</button>
+            <button id="btn-pause-game" class="hud-mini-btn" type="button" title="Pause / Resume Mission (P)">PAUSE</button>
+            <button id="btn-quick-restart" class="hud-mini-btn" type="button" title="Restart Mission (R)">RESTART</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 底部：战术技能冷却与哨塔建造栏 -->
+      <div id="hud-ability-dock" class="hud-bottom-row">
+        <div class="ability-slot" id="slot-primary-weapon">
+          <span class="slot-key">LMB / RMB</span>
+          <span id="slot-weapon-name" class="slot-title">PLASMA TWIN-CANNON</span>
+          <span id="slot-weapon-stat" class="slot-sub">HEAT: 0% | GRAV PULSE</span>
+        </div>
+        <div class="ability-slot" id="slot-phase-dash">
+          <span class="slot-key">SPACE</span>
+          <span class="slot-title">PHASE DASH</span>
+          <span id="cooldown-dash-text" class="slot-sub ready">READY (I-FRAMES)</span>
+        </div>
+        <div class="ability-slot" id="slot-chrono-rift">
+          <span class="slot-key">Q</span>
+          <span class="slot-title">CHRONO RIFT</span>
+          <span id="cooldown-rift-text" class="slot-sub ready">READY (65% SLOW)</span>
+        </div>
+        <div class="ability-slot" id="slot-orbital-lance">
+          <span class="slot-key">E</span>
+          <span class="slot-title">ORBITAL LANCE</span>
+          <span id="cooldown-lance-text" class="slot-sub ready">READY (AOE BEAM)</span>
+        </div>
+        <div class="ability-slot build-slot" id="slot-build-pulse">
+          <span class="slot-key">KEY 1 (40✦)</span>
+          <span class="slot-title">PULSE TURRET</span>
+          <span class="slot-sub">AUTO-TARGET LASER</span>
+        </div>
+        <div class="ability-slot build-slot" id="slot-build-pylon">
+          <span class="slot-key">KEY 2 (55✦)</span>
+          <span class="slot-title">AEGIS PYLON</span>
+          <span class="slot-sub">SHIELD + CORE REGEN</span>
+        </div>
+        <div class="ability-slot build-slot" id="slot-build-tesla">
+          <span class="slot-key">KEY 3 (70✦)</span>
+          <span class="slot-title">TESLA COIL</span>
+          <span class="slot-sub">CHAIN LIGHTNING</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- 1. 启动与指挥官整备封面界面 (Title / Command Deck Screen) -->
+    <section id="title-screen-overlay" class="modal-backdrop active">
+      <div class="command-deck-container">
+        <div class="title-hero-banner">
+          <div class="eyebrow-tag">TACTICAL TWIN-STICK &amp; TIME-RIFT CITADEL DEFENSE // OFFLINE ENGINE</div>
+          <h1 class="game-main-title">AETHERION: <span>CHRONO-BASTION</span></h1>
+          <p class="game-subtitle">
+            Pilot an experimental Chrono-Interceptor to defend the central <strong>Aether Core</strong> across 5 escalating Void Armada waves and the <strong>Void Leviathan Dreadnought</strong>. Harvest Chrono-Shards, deploy automated Bastion Turrets, bends time with Stasis Rifts, and draft Roguelite Augmentations.
+          </p>
+        </div>
+
+        <!-- 三大可选战机职业卡片 -->
+        <div class="ship-selection-section">
+          <h2 class="section-heading">SELECT INTERCEPTOR CHASSIS</h2>
+          <div id="ship-class-grid" class="class-cards-grid">
+            <button type="button" class="ship-class-card selected" data-class-id="valkyrie">
+              <div class="card-badge">BALANCED ASSAULT</div>
+              <h3>VALKYRIE-IX</h3>
+              <p>Rapid Twin-Plasma Cannons with high agility and reduced Phase-Dash cooldown.</p>
+              <ul class="stat-list">
+                <li><span>FIREPOWER:</span> ★★★★☆</li>
+                <li><span>SPEED / DASH:</span> ★★★★★</li>
+                <li><span>STARTING SHARDS:</span> 100 ✦</li>
+              </ul>
+            </button>
+            <button type="button" class="ship-class-card" data-class-id="aegis">
+              <div class="card-badge">BASTION ENGINEER</div>
+              <h3>AEGIS-VII GOLIATH</h3>
+              <p>Heavy Scatter-Railgun hull that starts with 1 free Pulse Turret and reinforced Core armor.</p>
+              <ul class="stat-list">
+                <li><span>HULL &amp; CORE:</span> ★★★★★</li>
+                <li><span>TURRET DMG:</span> +35%</li>
+                <li><span>STARTING SHARDS:</span> 140 ✦</li>
+              </ul>
+            </button>
+            <button type="button" class="ship-class-card" data-class-id="chronos">
+              <div class="card-badge">TEMPORAL LANCER</div>
+              <h3>CHRONOS-IV PHANTOM</h3>
+              <p>Piercing Tachyon Beam emitter with expanded Chrono-Rift stasis fields and Arc synergy.</p>
+              <ul class="stat-list">
+                <li><span>PIERCE BEAM:</span> ★★★★★</li>
+                <li><span>RIFT DURATION:</span> +50%</li>
+                <li><span>STARTING SHARDS:</span> 115 ✦</li>
+              </ul>
+            </button>
+          </div>
+        </div>
+
+        <!-- 规则与键鼠操作总览 -->
+        <div class="rules-and-controls-grid">
+          <div class="info-panel">
+            <h3>MISSION RULES &amp; VICTORY CONDITIONS</h3>
+            <ul>
+              <li><strong>Win Condition:</strong> Survive all <strong>5 Sector Waves</strong> and destroy the <strong>Void Leviathan Dreadnought</strong> in Wave 5.</li>
+              <li><strong>Lose Condition:</strong> Mission fails if the central <strong>Aether Core</strong> reaches 0 HP or your Interceptor hull is destroyed.</li>
+              <li><strong>Economy &amp; Upgrades:</strong> Defeated enemies drop <strong>Chrono-Shards (✦)</strong>. Spend Shards with keys <code>1 / 2 / 3</code> to build turrets around the Core, and choose 1 of 3 <strong>Synergy Augmentations</strong> after every wave.</li>
+            </ul>
+          </div>
+          <div class="info-panel">
+            <h3>KEYBOARD &amp; MOUSE CONTROLS</h3>
+            <div class="controls-table">
+              <div><kbd>W A S D</kbd> / <kbd>Arrows</kbd><span>Thruster Movement</span></div>
+              <div><kbd>Mouse</kbd> + <kbd>Left Click</kbd><span>360° Aim &amp; Primary Fire</span></div>
+              <div><kbd>Right Click</kbd><span>Gravity Shockwave Pulse</span></div>
+              <div><kbd>SPACE</kbd><span>Phase-Dash (Invulnerable)</span></div>
+              <div><kbd>Q</kbd> / <kbd>E</kbd><span>Chrono-Rift / Orbital Lance</span></div>
+              <div><kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd><span>Deploy Bastion Turrets</span></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="launch-bar">
+          <button id="btn-launch-campaign" type="button" class="cta-primary-btn">
+            LAUNCH CAMPAIGN MISSION (ENTER / CLICK)
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- 2. 波次间 Roguelite 战术强化三选一弹窗 (Tactical Augmentation Draft Modal) -->
+    <section id="tactical-augment-modal" class="modal-backdrop">
+      <div class="augment-modal-container">
+        <div class="eyebrow-tag amber-tag">SECTOR WAVE CLEARED // TACTICAL AUGMENTATION MATRIX</div>
+        <h2 id="augment-modal-title" class="modal-main-title">SELECT 1 SYNERGY AUGMENTATION</h2>
+        <p id="augment-modal-subtitle" class="modal-subtitle">
+          Aether Core hull partially restored (+80 HP). Choose an augmentation module to install before the next Void Armada warp-in.
+        </p>
+        <div id="augment-cards-container" class="augment-cards-row">
+          <!-- 由 augment-synergy-draft.js 动态渲染 3 张升级卡 -->
+        </div>
+        <div class="augment-footer-bar">
+          <span id="installed-augments-summary" class="installed-list">ACTIVE MODULES: NONE</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- 3. 战役结算与重开战报界面 (Victory / Defeat Debrief Screen) -->
+    <section id="campaign-debrief-screen" class="modal-backdrop">
+      <div class="debrief-container">
+        <div id="debrief-status-tag" class="eyebrow-tag">CAMPAIGN TELEMETRY DEBRIEF</div>
+        <h2 id="debrief-headline" class="debrief-title">AETHER CITADEL SECURED // VICTORY</h2>
+        <p id="debrief-subheadline" class="debrief-desc">
+          The Void Leviathan Dreadnought has been neutralized and the Aether Core remains online.
+        </p>
+
+        <div class="debrief-stats-grid">
+          <div class="debrief-stat-box highlight-box">
+            <span class="stat-caption">COMMAND RATING</span>
+            <span id="debrief-rank-grade" class="stat-big-grade">S+</span>
+          </div>
+          <div class="debrief-stat-box">
+            <span class="stat-caption">FINAL SCORE</span>
+            <span id="debrief-final-score" class="stat-big-num">148,500</span>
+          </div>
+          <div class="debrief-stat-box">
+            <span class="stat-caption">WAVES CLEARED</span>
+            <span id="debrief-waves-cleared" class="stat-big-num">5 / 5</span>
+          </div>
+          <div class="debrief-stat-box">
+            <span class="stat-caption">HOSTILES NEUTRALIZED</span>
+            <span id="debrief-kills-count" class="stat-big-num">142</span>
+          </div>
+          <div class="debrief-stat-box">
+            <span class="stat-caption">PEAK OVERDRIVE COMBO</span>
+            <span id="debrief-peak-combo" class="stat-big-num">x9.5</span>
+          </div>
+          <div class="debrief-stat-box">
+            <span class="stat-caption">AETHER CORE INTEGRITY</span>
+            <span id="debrief-core-remaining" class="stat-big-num">445 / 500</span>
+          </div>
+        </div>
+
+        <div id="debrief-medals-row" class="medals-strip">
+          <span class="medal-chip">★ LEVIATHAN SLAYER</span>
+          <span class="medal-chip">★ CHRONO ARCHITECT</span>
+          <span class="medal-chip">★ UNBROKEN AEGIS</span>
+        </div>
+
+        <div class="debrief-actions-row">
+          <button id="btn-play-again" type="button" class="cta-primary-btn">
+            PLAY AGAIN // NEW CAMPAIGN RUN
+          </button>
+          <button id="btn-return-command-deck" type="button" class="cta-secondary-btn">
+            RETURN TO COMMAND DECK (CHANGE SHIP)
+          </button>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <script type="module" src="./src/game-bootstrap.js"></script>
+</body>
+</html>
