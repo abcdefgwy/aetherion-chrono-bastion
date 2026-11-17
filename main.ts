@@ -1,50 +1,61 @@
-/**
- * AETHERION: CHRONO-BASTION — 参赛交付入口脚本 (main.ts)
- * 负责将离线网页游戏目录 game/ 与实机运行截图目录 screenshots/ 复制至目标输出目录，
- * 并调用官方 vendor/makefun-game.ts 中的 buildDossier 生成字节级一致的 dossier.json。
- */
-
-import { cpSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { copyFileSync, existsSync, mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { join, resolve } from 'node:path';
 import { buildDossier } from './vendor/makefun-game.ts';
 
 /**
- * 解析当前仓库根目录路径与评测输出目录路径，并校验评测约束参数
+ * make.fun best-game-01 打包入口脚本
+ * 负责将 game/ 与 screenshots/ 复制到输出目录并生成符合规范的 dossier.json
  */
-const DOSSIER_EXPORT_LIMITS = Object.freeze({
+const DOSSIER_CAPS = {
   text_max_bytes: 163840,
   screenshots: { max: 4, max_bytes: 262144 },
   game_max_files: 993,
   game_max_bytes: 50331648,
-  game_path_max_bytes: 1000,
-});
-
-function resolveExportDirectories(): { repoRootDir: string; targetOutputDir: string } {
-  const repoRootDir = fileURLToPath(new URL('.', import.meta.url));
-  const targetOutputDir = process.env.MAKEFUN_OUTPUT_DIR ?? '/output';
-  return { repoRootDir, targetOutputDir };
-}
+  game_path_max_bytes: 1000
+} as const;
 
 /**
- * 同步拷贝游戏静态资源与实机截图并生成 dossier.json
+ * 确定性地递归复制目录内容（按码点字典序遍历）
+ * @param srcDir 源目录绝对路径
+ * @param destDir 目标目录绝对路径
  */
-function exportGameSubmissionArtifact(): void {
-  const { repoRootDir, targetOutputDir } = resolveExportDirectories();
-
-  mkdirSync(targetOutputDir, { recursive: true });
-  cpSync(join(repoRootDir, 'game'), join(targetOutputDir, 'game'), { recursive: true });
-
-  const targetScreenshotsDir = join(targetOutputDir, 'screenshots');
-  mkdirSync(targetScreenshotsDir, { recursive: true });
-
-  const sourceScreenshotsDir = join(repoRootDir, 'screenshots');
-  if (existsSync(sourceScreenshotsDir)) {
-    cpSync(sourceScreenshotsDir, targetScreenshotsDir, { recursive: true });
+function copyDirRecursive(srcDir: string, destDir: string): void {
+  mkdirSync(destDir, { recursive: true });
+  const entries = readdirSync(srcDir).sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+  for (const name of entries) {
+    const srcPath = join(srcDir, name);
+    const destPath = join(destDir, name);
+    const info = statSync(srcPath);
+    if (info.isDirectory()) {
+      copyDirRecursive(srcPath, destPath);
+    } else if (info.isFile()) {
+      copyFileSync(srcPath, destPath);
+    }
   }
-
-  const dossierPayloadBytes = buildDossier(targetOutputDir, DOSSIER_EXPORT_LIMITS);
-  writeFileSync(join(targetOutputDir, 'dossier.json'), dossierPayloadBytes);
 }
 
-exportGameSubmissionArtifact();
+function main(): void {
+  const rootDir = resolve('.');
+  const outDir = resolve(process.env.MAKEFUN_OUTPUT_DIR || '/output');
+  const gameSrc = join(rootDir, 'game');
+  const shotsSrc = join(rootDir, 'screenshots');
+
+  const gameOut = join(outDir, 'game');
+  const shotsOut = join(outDir, 'screenshots');
+
+  mkdirSync(outDir, { recursive: true });
+  rmSync(gameOut, { recursive: true, force: true });
+  rmSync(shotsOut, { recursive: true, force: true });
+
+  copyDirRecursive(gameSrc, gameOut);
+  if (existsSync(shotsSrc)) {
+    copyDirRecursive(shotsSrc, shotsOut);
+  } else {
+    mkdirSync(shotsOut, { recursive: true });
+  }
+
+  const dossierBytes = buildDossier(outDir, DOSSIER_CAPS);
+  writeFileSync(join(outDir, 'dossier.json'), dossierBytes);
+}
+
+main();
