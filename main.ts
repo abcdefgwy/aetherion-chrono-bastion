@@ -1,5 +1,6 @@
-import { copyFileSync, existsSync, mkdirSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, readdirSync, statSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { buildDossier } from './vendor/makefun-game.ts';
 
 /**
@@ -35,7 +36,7 @@ function copyDirRecursive(srcDir: string, destDir: string): void {
 }
 
 function main(): void {
-  const rootDir = resolve('.');
+  const rootDir = fileURLToPath(new URL('.', import.meta.url));
   const outDir = resolve(process.env.MAKEFUN_OUTPUT_DIR || '/output');
   const gameSrc = join(rootDir, 'game');
   const shotsSrc = join(rootDir, 'screenshots');
@@ -44,8 +45,6 @@ function main(): void {
   const shotsOut = join(outDir, 'screenshots');
 
   mkdirSync(outDir, { recursive: true });
-  rmSync(gameOut, { recursive: true, force: true });
-  rmSync(shotsOut, { recursive: true, force: true });
 
   copyDirRecursive(gameSrc, gameOut);
   if (existsSync(shotsSrc)) {
